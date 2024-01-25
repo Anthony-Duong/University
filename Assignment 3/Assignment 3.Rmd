@@ -1,0 +1,231 @@
+---
+title: 'Assignment 3'
+author: 'Anthony Duong'
+output:
+  html_notebook:
+    theme: spacelab
+  pdf_document: default
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+------------------------------------------------------------------------
+
+## Assignment 4: Use of models in biology
+
+**Part I: Population dynamics**
+
+Recall the model of density-independent population dynamics from the
+Week 11 Practical. For an organism with a current population size of n,
+the population size in the next year will be:
+
+n\^'=n(1+r)
+
+where r is the intrinsic growth rate of the population. Recall that r is
+a function of the birth and death parameters of the population (r = b
+-d - bd, where b represents the average number of offspring each
+individual produces during the breeding phase of the life cycle, and d
+represents the proportion of individuals that die during the mortality
+phase).
+
+**Question 1.** Consider a population of perennial plants that breed in
+the early spring and suffer high drought-related mortality late in the
+summer. Field monitoring experiments suggest that drought leads to a 50%
+decline in the population during the late summer (d = 0.5). Given this
+degree of mortality, use the model to calculate how many offspring each
+individual would, on average, have to produce during the breeding season
+to prevent the population from declining over time. In other words,
+calculate the minimum value of b that would be compatible with
+population growth. [1 point]
+
+Scoring: Full credit for providing the correct answer and showing how
+the answer was obtained (i.e., show your work).
+
+    For population to not decline over time, r ≥ 0. Thus: 
+    Since; r = b - d -bd & r ≥ 0
+
+    Therefore; 
+    0 ≤ b - d - bd 
+    0 ≤ b - 0.5 - 0.5b 
+    0.5 ≤ b - 0.5b 
+    1≤ 2b - b 
+    b≥1
+
+    Therefore, each individual would have to produce 1 offspring each year
+    to stabilise the population and produce more than 1 to increase the
+    population.
+
+Suppose that you are monitoring island endemic cricket population that
+has recently become threatened due to an invasive parasitoid wasp
+species that is attacking its members. From observations of birth and
+death rates, you estimate that the intrinsic growth rate of the cricket
+population to be r ̂=-0.05, which has a 95% confidence interval of:
+
+95% C.I. for r = [-0.01, -0.1]
+
+Since the entire confidence interval for your estimate of r is negative,
+your data imply that the population will decline over time.
+
+**Question 2.** The current size of the cricket population is 5,000
+individuals. Assume that the current conditions of parasitism do not
+change and, thus, r remains constant over time. Use your point estimate
+for r (r ̂=-0.05) and the model presented above to predict the amount of
+time it will take for the population size to decline below 50
+individuals, which is the threshold for a "critically endangered"
+classification. Show how you arrived at your conclusion. [1 point]
+
+Scoring: Full credit for providing the correct answer and showing how
+the answer was obtained (i.e., submit the R code and relevant simulation
+output to justify the answer OR present a detailed mathematical solution
+to the question).
+
+```{r}
+r = -0.05
+n.0 = 5000
+n = n.0
+data = n
+years = 100
+
+for(i in 1:years){
+  n = n*(1 + r)
+  data = c(data, n)
+}
+
+times = 0:10*(years/10)
+par(mfrow = c(1, 1))
+plot(0:years, data, type = "l", lwd = 3, xlab = "time (years)", ylab = "n")
+points(times, n.0*(1 + r)^times, pch = 16, cex = 1, col = "red")
+```
+
+    50 = 5000*(1 - 0.05)^t
+    t = 89.7
+
+    Therefore, it'll take 90 years for the species to be classified as critically endangered
+
+**Question 3.** There is uncertainty around your estimate of r. Suppose
+that the true value of r is within the 95% confidence interval presented
+above. Use the model to calculate a best-case scenario and worst-case
+scenario for the amount of time it will take for the cricket population
+to become critically endangered. Show how you arrived at your
+conclusions. [1 point]
+
+Scoring: Full credit for providing the correct answer and showing how
+the answer was obtained (i.e., submit the R code and relevant simulation
+output to justify the answer OR present a detailed mathematical solution
+to the question).
+
+```{r}
+#95% C.I. for r = [-0.01, -0.1]
+
+#worst case, lowest value of r
+
+r = -0.1
+n.0 = 5000
+n = n.0
+data = n
+years = 50
+
+for(i in 1:years){
+  n = n*(1 + r)
+  data = c(data, n)
+}
+
+times = 0:10*(years/10)
+par(mfrow = c(1, 1))
+plot(0:years, data, type = "l", lwd = 3, xlab = "time (years)", ylab = "n", main = 'worst case')
+points(times, n.0*(1 + r)^times, pch = 16, cex = 1, col = "red")
+
+#best case, highest value of r
+r = -0.01
+n.0 = 5000
+n = n.0
+data = n
+years = 500
+
+for(i in 1:years){
+  n = n*(1 + r)
+  data = c(data, n)
+}
+
+times = 0:10*(years/10)
+par(mfrow = c(1, 1))
+plot(0:years, data, type = "l", lwd = 3, xlab = "time (years)", ylab = "n", main = 'best case')
+points(times, n.0*(1 + r)^times, pch = 16, cex = 1, col = "blue")
+```
+
+    In the best case secnario, where the growth rate r is the highest, it'll take 459 years to reach the critically endagered stage. While the worst case scenario where the growth rate r is the lowest, it'll only take 44 years.
+
+**Part II: Evolutionary dynamics**
+
+Recall the haploid model of evolution by natural selection from the Week
+12 Prac. For a gene with two alleles (an A allele with frequency p and
+fitness wA, and an a allele with frequency q = 1 -- p and fitness wa),
+the allele frequency in the next generation will be:
+
+p\^'=(pw_A)/(pw_A+(1-p) w_a )
+
+**Question 4.** Imagine that you work in a lab that has recently carried
+out an evolution experiment in which there is a rapid increase in the
+frequency of an allele that they believe is beneficial in their study
+system (the study system is a microbial population of haploid
+individuals). Over a span of 25 generations, the allele has increased
+from an initial frequency of 0.05 to a final frequency of 0.95. Members
+of the lab wish to estimate the fitness advantage of individuals with
+the beneficial allele relative to the fitness of individuals without the
+allele (i.e., they wish to estimate wA/wa, where wA is the fitness of
+individuals with the beneficial allele and wa is the fitness of
+individuals with the alternative allele). Use the allele frequency data
+and the haploid model to estimate the fitness advantage of individuals
+with the beneficial allele. [1 point]
+
+Scoring: Full credit for providing the correct answer and showing how
+the answer was obtained (e.g., submit the R code and relevant simulation
+output to justify the answer OR present a detailed mathematical solution
+to the question).
+
+
+**Question 5.** Now consider a population in which the fitness advantage
+of the beneficial allele is 50% (i.e., wA/wa = 1.5). Suppose the
+beneficial allele starts out as a single copy within a population of
+100,000 individuals (its initially frequency would, therefore, be 10-5).
+Assuming that the advantage of the allele remains constant over time,
+how many generations will it take for it to reach a frequency of 0.5?
+How long would it take to reach a frequency of 0.99? [1 point]
+
+Scoring: Full credit for providing the correct answer and showing how
+the answer was obtained (e.g., submit the R code and relevant simulation
+output to justify the answer OR present a detailed mathematical solution
+to the question).
+```{r}
+#to reach 0.5 frequency
+s = -0.05/1.5
+p = 0.9999
+data = p
+
+while(p > 0.5){
+  p = p*(1 + s)/(1 + p*s)
+  data = c(data, p)
+}
+
+par(mfrow = c(1, 1))
+plot(data, type = "l", lwd = 3, xlab = "time (generations)", ylab = "p", main = '0.5 frequency')
+
+length(data)-1
+
+#to reach 0.99 frequency
+s = -0.05/1.5
+p = 0.9999
+data = p
+
+while(p > 0.01){
+  p = p*(1 + s)/(1 + p*s)
+  data = c(data, p)
+}
+
+par(mfrow = c(1, 1))
+plot(data, type = "l", lwd = 3, xlab = "time (generations)", ylab = "p", main = '0.99 frequency')
+
+length(data)-1
+```
+

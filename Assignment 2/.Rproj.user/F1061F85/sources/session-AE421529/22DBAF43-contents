@@ -1,0 +1,723 @@
+---
+title: "BIO2010 Week 8"
+output: 
+  learnr::tutorial:
+    progressive: true
+runtime: shiny_prerendered
+---
+
+<!-- 
+########################################################################################
+########################################################################################
+###                                                                                  ###
+###  START THE TUTORIAL BY CLICKING THE 'RUN DOCUMENT' BUTTON ABOVE THIS WINDOW.     ###
+###                  DO NOT ENTER ANY CODE ABOVE OR BELOW THIS BOX.                  ###
+###                                                                                  ###
+########################################################################################
+########################################################################################
+--> 
+
+```{r setup, include=FALSE}
+#Run code that can be accessed by all other chunks
+library("learnr")
+library("tidyverse") 
+library("ggResidpanel")
+library("car")
+
+knitr::opts_chunk$set(echo = FALSE)
+
+#import silene data
+silene <- read_csv("silene.csv", 
+                    col_name = TRUE, na = c("NA"), #columns have names and NAs are missing values
+                    col_types = list(speciesPair = col_factor(), #sets 'speciesPair' as a factor
+                                     geneticDistance = col_double(), #sets 'geneticDistance' as numeric
+                                     propSterile_raw = col_double())) #sets 'propSterile_raw' as numeric
+
+#arcsine square-root transform 'propSterile_raw'
+silene <- silene %>% #use this data and save results to it
+  mutate(propSterile = asin(sqrt(propSterile_raw))) #transform 'propSterile_raw' and store as a new variable called 'propSterile'
+
+#import mammal data
+mammals <- read_csv("mammals.csv",
+                     col_name = TRUE, na = c("NA"), #columns have names and NAs are missing values
+                     col_types = list(name = col_factor(), #sets 'name' as na factor
+                                      bodymass = col_double(), #sets 'bodymass' as numeric
+                                      brainmass = col_double())) #sets 'brainmass' as numeric
+
+#ln-transform 'bodymass' and 'brainmass'
+mammals <- mammals %>% #use this data and save results to it
+  mutate(lnbodymass = log(bodymass),  #transform ''bodymass' and store as 'lnbodymass'
+         lnbrainmass = log(brainmass)) #transform 'brainmass' and store as 'lnbrainmass'
+```
+
+# Linear models II: linear regression
+
+<div class="alert alert-info">
+**This is an interactive tutorial.** You can preview it in its own window or in the viewer pane (to switch between these options, click the cog button at the right of *Run Document* in the toolbar and select the option you prefer). From either option, you can open the tutorial in a browser window by clicking the *Show in new window* or *Open in browser* button at the top left. 
+
+**To save the tutorial**, open it in a browser window and save as a PDF (in Chrome, click *File > Print > Save as PDF*, or click the three dots at the right of the menu, then click *Print > Save as PDF*; in Safari, click *File > Export as PDF > Save*; other browsers may have other options). Not all browsers let you save tutorials as a single PDF. If yours won't, try saving topics separately.  
+
+**To reset the tutorial**, click the *Start over* button at the left under the contents panel. 
+
+**In addition to R's built-in functions, the tutorial uses functions from the *tidyverse*, *ggResidpanel*, and *car* packages. All packages should load when the tutorial starts.**
+</div>
+
+## Regression as a linear model
+
+Last week introduced you to *linear models* (also known as *general linear models*), one of the most important statistical tools for estimating parameters of interest and testing hypotheses about them. Remember, all linear models have a response variable expressed as a function of a model plus random error, like so:
+
+<p style="text-align: center;">
+**$response\ variable$ = $model$ + $error$**
+</p>
+
+
+Let's quickly recap some key concepts.
+
+
+```{r quiz-statmodels1}
+    question("In the equation for the linear model above, the *response variable* represents:", 
+    answer("a categorical variable."),
+    answer("a numerical variable that is has no distributional assumptions made about it."),
+    answer("a numerical variable that is assumed to have an approximately normal (bell-shaped) distribution.", correct=T),
+    allow_retry=T)
+```
+
+```{r quiz-statmodels2}
+    question("In the equation for the linear model above, the *model* represents:", 
+    answer("one or more explanatory variables."),
+    answer("one or more explanatory variables and parameters relating them to the response variable.", correct=T),
+    answer("the parameters relating the response and explanatory variables."),
+    allow_retry=T)
+```
+
+```{r quiz-statmodels3}
+    question("In the equation for the linear model above, the *error* represents:", 
+    answer("the observed values of the response variable."),
+    answer("the values of the response variable predicted by the model formula."),
+    answer("the differences between observed values of the response variable and its values predicted by the model formula.", correct=T), 
+    allow_retry=T)
+```
+
+**Regression is a linear model for predicting values of one numerical variable from values of another.** By extension, regression tests the *association* (or *relationship*) between variables. It therefore differs from last week's ANOVA by having an explanatory variable that is numerical, but otherwise shares the same properties and assumptions that all linear models (including ANOVAs) do. 
+
+**<span style="text-decoration:underline">Linear</span> regression fits a straight-line relationship between variables.** Note that this definition is not universal, but the textbook adopts it and so will we. We'll only consider linear regression in this unit, so wherever you see 'regression' it means the definition above. 
+
+As we saw in the workshop, the linear model for a regression has a straight line as the model formula. To illustrate, let's revisit the workshop example below. 
+
+The figure shows the proportions of sterile pollen in hybrid offspring from 23 pairs of *Silene* species (plants known as campions or catchflies) plotted against genetic distance between species. Proportions have been arcsine square-root transformed to meet the model assumptions, which we'll cover below. The red line is the line of best fit (or regression line) relating the two variables. As always, the code to make this figure is reproduced at the end of the tutorial if you are interested, but it's not important right now. 
+
+<br>
+
+```{r echo=FALSE, fig.height = 4.5, fig.width = 4.5, fig.align = 'center', fig.cap="**Figure 1. Hybrid sterility plotted against genetic distance in *Silene* species.**"}
+ggplot(data = silene, mapping = aes(y = propSterile, x = geneticDistance)) + 
+       geom_smooth(method=lm, formula=y~x, colour="red3", size=1, se = FALSE) +
+       geom_point(colour = "dodgerblue3", size=1.5) + 
+       scale_x_continuous(name = "Genetic distance", limits=c(0,0.2), breaks = c(0.00, 0.05, 0.10, 0.15, 0.20), expand = expansion(add = c(0.01, 0))) + 
+       coord_cartesian(ylim = c(0, 1.6)) + 
+       scale_y_continuous(name = "Proportion of pollen sterile", breaks = c(0, 0.4, 0.8, 1.2, 1.6), expand = expansion(add = c(0, 0))) + 
+       theme_classic() +
+       theme(axis.title=element_text(size=10, face="bold"), # axis titles
+             axis.text=element_text(size=10),
+             plot.margin = unit(c(t=0.3, r=0.5, b=0.1, l=0.1), "cm"), 
+             axis.line = element_line(colour = 'black', size = 0.25), 
+             axis.ticks = element_line(colour = "black", size = 0.25))
+```
+
+<br>
+
+We can write a linear model that summarises what we see in the figure like so:
+
+<br>
+<p style="text-align: center;">
+**$Y_i$ = $\alpha$ + $\beta$$X_i$ + $\varepsilon_i$**
+</p>  
+
+Here's what the model notation means:
+
+* each $Y_i$ is the observed proportion of sterile pollen in offspring from species pair $i$ (the vertical position of each point);  
+* each $X_i$ is the genetic distance between that species pair $i$ (the horizontal position of each point);  
+* $\alpha$ is the mean value of $Y$ when $X$ is 0 (the line's intercept) and $\beta$ is the change in mean $Y$ per unit of change in $X$ (the line's slope);  
+* each $\varepsilon_i$ is the difference between an observed proportion and the proportion predicted by the model formula<span style="color:red">*</span> (the vertical distance from each point to the line).
+
+<span style="color:red">*</span>Remember: values predicted by model formulas are called 'predicted values' (written as $\hat{Y}$). Here, $\hat{Y}_i$ is the predicted mean sterility of pollen in offspring from a species pair with a genetic distance of $X_i$, and is the outcome of the model formula ($\alpha$ + $\beta$$X_i$). The idea of a 'predicted mean' is a bit slippery, so there's an explanatory figure (why-predicted-values-are-means.pdf) attached to this project. 
+
+
+```{r quiz-statmodels5}
+question("Which of the following statements about the linear model are correct? Check all that apply.",
+    answer("The parameter $\\alpha$ in the model formula is the intercept of the red regression line in the plot.", correct = T),
+    answer("Based on the plot, the estimate of $\\alpha$ is positive.", correct = T),
+    answer("The parameter $\\beta$ in the model formula is the slope of the red regression line in the plot.", correct = T),
+    answer("Based on the plot, the estimate of $\\beta$ is positive.", correct = T),
+    allow_retry=T)
+```
+
+## Fitting a regression using *lm()*
+
+Since linear regression is a linear model just like ANOVA, we can fit a regression, check that it meets the assumptions it makes, and test hypotheses about the relationships it describes, in much the same way as last week. The steps and R functions used along the way are essentially unchanged. Let's see how this works for the *Silene* example above, then move on to a new example to practice coding and interpreting regressions in R.
+
+The *Silene* data have been pre-loaded for you using the code below. The first bit of code in the chunk reads in the data file, which has the raw proportions of sterile pollen (`propSterile_raw`). The second bit of code then arcsine square-root transforms the raw proportions and saves the transformed ones as a new variable (`propSterile`), which we'll use for the analysis.
+
+```{r echo=TRUE, eval=FALSE}
+#import silene data
+silene <- read_csv("silene.csv", 
+                    col_name = TRUE, na = c("NA"), #columns have names and NAs are missing values
+                    col_types = list(speciesPair = col_factor(), #sets 'speciesPair' as a factor
+                                     geneticDistance = col_double(), #sets 'geneticDistance' as numeric
+                                     propSterile_raw = col_double())) #sets 'propSterile_raw' as numeric
+
+#compute an arcsine square-root transformation of 'propSterile_raw'
+silene <- silene %>% #use this data and save results to it
+  mutate(propSterile = asin(sqrt(propSterile_raw))) #transform 'propSterile_raw' and save results as a new variable called 'propSterile'
+```
+<br>
+
+To inspect the data, type `silene` into the code chunk below, then click the "Run code" button at the top right of the chunk. You can navigate through the data using the arrow buttons and "Previous/Next" buttons. Is everything as it should be (i.e. are variables set to the correct types)? 
+
+```{r silene1, exercise=TRUE}
+
+```
+
+Note that `speciesPair` (the replicates on which hybrid sterility and genetic distance were measured) is set as a factor. This is just an identifier variable included for the sake of housekeeping and does not enter the model. We also see the raw proportions (`propSterile_raw`) that were transformed to the values we're using (`propSterile`) for the analysis.  
+
+<br>
+
+### Exploring the data: visualisation
+
+As always, it's good practice to explore the data to check for any obvious problems, and to identify the relationships of interest. We've already done this by making the plot (Figure 1) above. Remember, we check model assumptions using residuals, not raw data, so at this point we just need to check for obvious outliers (extreme values of the response variable that are biologically implausible). There don't appear to be any outliers here. The relationship of interest (between hybrid sterility and genetic distance) is also clear. 
+
+### Exploring the data: summary statistics
+
+We'll skip this step. Some research papers might still report summary statistics (e.g., the mean and standard error of each variable), but we learn what we really need to know from the plot above. 
+
+### Fitting a straight-line relationship between variables
+
+The data show no obvious problems, and it looks like the level of hybrid sterility increases with increasing genetic distance between species. We can now fit a linear regression to test whether this is the case statistically (accounting for uncertainty in estimation due to sampling error). 
+
+Uncertainty in estimation means the slope of the line can't just be calculated as rise over run. Instead, regression uses a method called *least squares* to find the *line of best fit*, which minimises the differences between observed values of the response variable and the line ($\varepsilon_i$ in the linear model above). Doing so best predicts the response variable from the explanatory variable. 
+
+**Stating the hypotheses**  
+
+```{r quiz-silene1a}
+question("Which of the following statements of the null hypothesis are valid? Check all that apply.",
+    answer("The null hypothesis is that genetic distance and hybrid sterility are associated.", message = "The null always states that there is no relationship, effect, or difference. This is the *alternative* hypothesis."),
+    answer("The null hypothesis is that genetic distance and hybrid sterility are not associated.", correct = T),
+    answer("The null hypothesis is that $\\beta$, the slope of the line relating hybrid sterility to genetic distance, is 0.", correct = T),
+    answer("The null hypothesis is that $\\alpha$, the intercept of the line relating hybrid sterility to genetic distance, is 0.", message = "The intercept is the mean sterility when genetic distance is 0, which does not tell us about the *association* between variables"),
+    allow_retry=T
+    )
+```
+ 
+```{r quiz-silene1b}
+question("Which of the following statements of the alternative hypothesis are valid? Check all that apply.",
+    answer("The alternative hypothesis is that genetic distance and hybrid sterility are associated.", correct = T),
+    answer("The alternative hypothesis is that genetic distance and hybrid sterility are not associated.", message = "The alternative hypothesis always states that there *is* a relationship, effect, or difference. This is the *null* hypothesis."),
+    answer("The alternative hypothesis is that $\\beta$, the slope of the line relating hybrid sterility to genetic distance, is not 0.", correct = T),
+    answer("The alternative hypothesis is that $\\alpha$, the intercept of th line relating hybrid sterility to genetic distance, is not 0.", message = "The intercept is the mean sterility when genetic distance is 0, which does not tell us about the association between variables"),
+    allow_retry=T
+    )
+```
+ 
+ <br>
+ **Fitting the model**
+
+In the workshop, we manually 'fitted' the line that best predicts hybrid sterility from genetic distance in Activity 2 of the handout. For any model, 'fitting' just means using observations of response and explanatory variables to estimate the parameters relating them in the model formula. 
+
+In R, we can do this using the `lm()` function, which stands for linear model and is what we used for ANOVA last week. Like last week, we want to *save the fitted model* so that we can pass it to other steps. 
+
+The code below fits the linear regression model (and saves it as `silene.mod`) by passing two arguments to the `lm()` function. In this code:
+
+* the first argument is the model formula, with the response variable (`propSterile`) on the left of a tilde (`~`) and the explanatory variable (`geneticDistance`) on the right. 
+* the second argument is the data to use.   
+
+Last week, we also had a third argument that set the contrasts to use for groups in the explanatory variable. Regression has no groups, so there are no contrasts to set. We only need to do this when explanatory variables are categorical (factors).
+
+The last line of code calls (or prints) the fitted model so we can see it. We always need to do this to show an object (like a model) that we've saved. 
+
+```{r echo=TRUE, results='hide'}
+#fit the linear regression model
+silene.mod <- #saves the model as 'silene.mod`
+  lm(propSterile ~ geneticDistance, #states the model formula
+     data = silene) #states the data to use
+   
+#call/print the regression model so we can see it
+silene.mod
+```
+
+<br>
+Enter the code above into the chunk below to fit the model (also show the model by entering `silene.mod` afterwards), then click the "Run code" button at the top right of the chunk. 
+
+```{r silene2, exercise=TRUE}
+
+```
+
+<br>
+Just like last week, we see two bits of output. First, under `Call:`, we see the model we fitted. Second, under `Coefficients:`, we see two values. They're the parameter estimates for the line of best fit relating the response and explanatory variables in the model formula. The `(Intercept)` is the estimate of the line's intercept ($\alpha$), while `geneticDistance` is the estimate of the line's slope ($\beta$). Apart from the `(Intercept)`, which is always a constant, R labels coefficients based on the explanatory variables they relate to. 
+
+Try answering the questions below. Don't worry about the fact that proportions are transformed (and therefore go higher than 1) -- just base your answers on the estimates for the transformed data used to fit the model. 
+
+```{r quiz-silene2a}
+question_text("What proportion of pollen are predicted to be sterile, on average, in offspring from parents of the same species? Round your answer to 2 decimal places.",
+    answer("0.42", correct = T),
+    answer(".42", correct = T),
+    incorrect = "Did you round to 2 decimal places?",
+    allow_retry = T)
+```
+ 
+```{r quiz-silene2b}
+question_text("What is the predicted change in the proportion of sterile pollen per unit of change in genetic distance? Round your answer to 2 decimal places.",
+    answer("7.10", correct = T),
+    incorrect = "Did you round to 2 decimal places?",
+    allow_retry = T)
+```
+
+```{r quiz-silene2c}
+question_text("What proportion of pollen are predicted to be sterile, on average, in hybrid offspring from species with a genetic distance of 0.15? Round your answer to 2 decimal places, and use the spare chunk below to calculate your answer if you wish.",
+    answer("1.48", correct = T),
+    answer("1.49", correct = T),
+    incorrect = "Did you round to 2 decimal places?",
+    allow_retry = T)
+```
+
+```{r silene3, exercise=TRUE}
+
+```
+
+<br>
+Answering these questions illustrates the main purpose of linear regression: the line of best fit estimated from the data lets us predict the mean value of $Y$ for any value of $X$ *within the range used to fit the line*. **We can use values of $X$ that weren't in the original data, but we cannot extrapolate to values of $X$ beyond this range.** That's because we don't know how the relationship between $X$ and $Y$ might change at more extreme values. 
+
+However, the line of best fit is estimated with uncertainty, which we measured when we calculated the standard error of the slope in the workshop. That means uncertainty also affects the precision of predictions made from the line, and we'll come back to this point soon. 
+
+## Assumptions of regression
+
+Now we've fitted the model, let's check that it meets the assumptions of linear regression before proceeding. Remember, linear regression is a linear model, so it makes the same assumptions all linear models do. We covered them last week for ANOVA, and the only change this week is that groups in $X$ (which is a factor in ANOVA) are now replaced by values of $X$ (which is numerical in regression). 
+
+```{r quiz-silene4a}
+    question("Which of the following is an assumption of linear regression? Check all that apply.",
+    answer("$1$. The response variable ($Y$) is linearly related to the explanatory variable ($X$).", correct = T),
+    answer("$2$. Values of $Y$ are normally distributed at all values of $X$.", correct = T),
+    answer("$3$. Values of $Y$ have equal variance at all values of $X$.", correct = T),
+    answer("$4$. Values of $Y$ are randomly sampled at all values of $X$.", correct = T),
+    allow_retry=T
+    )
+```
+ 
+Also remember from last week: assumption 1 is ensured for ANOVA by how groups in factors are modelled. Regression doesn't involve groups, so this assumption is no longer ensured, and will be violated if the response and explanatory variables don't have a straight-line relationship. Like any other linear model, we can check the assumptions of regression by inspecting diagnostic plots of residuals against various other quantities. 
+
+We'll check the same two diagnostic plots as last week.
+
+**Residual plots have residuals on the vertical axis and predicted values (or fitted values) on the horizontal axis**.
+
+* If $Y$ is linearly related to $X$ (assumption 1), then residuals will show little curvature moving from left to right across predicted values. 
+* If values of $Y$ are normally distributed at all values of $X$ (assumption 2), then residuals will form a roughly symmetrical cloud above and below the horizontal line at zero, and be denser nearer the line than away from it. 
+* If values of $Y$ have equal variance at all values of $X$ (assumption 3), then residuals will have roughly equal spread above and below the horizontal line at 0 at all predicted values. 
+* If values of $Y$ are randomly sampled (and thus independent) at all values of $X$ (assumption 4), then residuals will show little association with other residuals or predicted values. 
+
+**Q-Q (or normal quantile) plots have residuals on the vertical axis and expectations for a normal distribution on the horizontal axis**. They check assumption 2 (and are the easiest way check it). If values of $Y$ are normally distributed at all values of $X$, then residuals will *roughly* follow a straight diagonal line. They  will *always be a bit wobbly* because sampling is random, but systematic deviations from the line (large curvature over many values, or large jumps in the distribution) indicate deviations from normality. 
+
+We can call diagnostic plots for a fitted model by passing it to the `resid_panel()` function of the *ggResidpanel* package, like so:
+
+```{r echo=TRUE, eval=FALSE}
+#call residual ("resid") and Q-Q ("qq") plots to check model assumptions
+resid_panel(silene.mod, plots = c("resid", "qq"))
+```
+
+Use the code chunk below to call diagnostic plots for our linear regression model (`silene.mod`). Remember, output doesn't carry across chunks in tutorials, so the regression model also needs to refitted in this chunk in order to pass it to the `resid_panel()` function in the same chunk. Just paste in the code used to fit the model before, then pass the model to the `resid_panel()` function using the code above. 
+
+```{r silene4, exercise=TRUE}
+
+```
+
+**Remember, if assumptions aren't met, we can usually do one of two things.** If both of them fail, then alternatives are covered in Chapter 13 of the textbook, but are beyond our scope in this unit.
+
+**1. Assume the model is robust to the deviations seen.** We should never expect perfection (*some* deviations from assumptions are inevitable for data sampled at random), and we may accept the model output if violations aren't too drastic. See *assumptions-met-vs-not-met.pdf* (attached to this project) for examples of residual plots where asssumptions *are* met versus *not* met.  
+
+**2. Transform the data.** We can often make curved relationships linear, and improve unequal variance or non-normality, by transforming values of $Y$ and/or values of $X$. Taking the natural logarithm of each value is the most common transformation, but if any values are 0, then we must *first* add a small constant (1) to all values. That's because the log of 0 is undefined, and values must all be treated equally to preserve their scale.  
+
+Alternatively, square-root transformation is often effective if values of $Y$ are counts, and arcsine square-root transformation is often effective if values of $Y$ are proportions. We start by transforming $Y$ (since assumptions apply mostly to the response variable), then re-fit the model, and re-check diagnostic plots. If they show that violations persist, we then transform $X$. See section 17.6 of the textbook for more detail. 
+
+We're analysing proportions that are already arcsine square-root transformed to meet the model assumptions. This was done using the code below (a square-root transformation would be done by deleting `asin`, and code for a ln-transformation was in last week's tutorial).
+
+```{r echo=TRUE, eval=FALSE}
+#compute an arcsine square-root transformation of 'propSterile_raw'
+silene <- silene %>% #use this data and save results to it
+  mutate(propSterile = asin(sqrt(propSterile_raw))) #transform 'propSterile_raw' and save results as a new variable called 'propSterile'
+```
+
+```{r quiz-silene4b}
+    question("Does our model (`silene.mod`) show any serious violations of the assumptions of linear regression?",
+    answer("Yes.", message = "Check *assumptions-met-vs-not-met.pdf* (attached to this project) for an example of violations that are serious enough to worry about."),
+    answer("No.", correct = T),
+    allow_retry=T)
+```
+
+## Testing slopes: the *t*-test
+
+Now we've fitted the linear regression and checked its assumptions, we can proceed with testing the null hypothesis about the regression slope. In the workshop, we saw that there are two tests we can use to do this: a *t*-test or an *F*-test (the so-called ANOVA approach). Both of them are easy to do in R, so let's start with the *t*-test. 
+
+All we need to do is pass the fitted model `silene.mod` to R's built in `summary()` function, like so: `summary(silene.mod)`. Use the code chunk below to do this. Remember, output doesn't carry across chunks in tutorials, so the model also needs to be refitted in this chunk in order to pass it to the `summary()` function in the same chunk. Just paste in the code used to the fit model before, then pass the model to the `summary()` function. 
+
+```{r silene5, exercise=TRUE}
+
+```
+
+### Interpreting the output
+
+We get quite a bit output here, so let's work through it from top to bottom. 
+
+**Call** shows the equation used to fit the model.  
+
+**Residuals** summarise the residuals we already looked at when we checked assumptions.  
+
+**Coefficients** are the estimates of $\alpha$ (the line of best fit's intercept) and $\beta$ (the line of best fit's slope) that we already saw above, but `summary()` *also* gives us a standard error and *t*-test for each estimate. The test statistic, *t*, is the estimate divided by its standard error (just like we saw in Week 6 and this week's workshop) and `Pr(>|t|)` is the probability (`Pr`) of getting a test statistic (`|t|`) as extreme as the one observed if the null hypothesis is true. The test of the slope is of most interest (the test of the intercept matters little in regression and is usually ignored, but R shows it for all linear models). Beneath the coefficients are the codes used to indicate the significance level. 
+
+The last three rows are measures of *model fit*. They all indicate how well the model explains the total variance in the response variable.
+
+**Residual standard error** is the average size of residuals (specifically, it's the square root of the $MS_error$, which we calculated in Activity 3 of the workshop handout). The smaller the error, the better the model fit.  
+
+**Multiple R-squared** is the fraction of the total variance in the response variable explained by the model (so it's the same as the $R^2$ we met last week). The larger the R-squared, the better the model fit.  
+
+**Adjusted R-squared** takes model complexity into account by adjusting for the degrees of freedom it uses (the regression uses one degree of freedom, so both types of R-squared are similar here). Again, the larger the R-squared, the better the model fit. 
+
+**F-statistic** tests the null hypothesis that the variance explained by the model is 0, and its *P*-value is the probability of getting a statistic as extreme as the one observed if the null is true. The larger the statistic, the better the model fit.
+
+You don't need to memorise all of this output (the aim here is just to demystify it). **A research article would typically focus on the *t*test of the regression slope, and either type of R-squared**. This is because the fraction of variance explained by a model is a more descriptive and easy-to-interpret measure of model fit than other measures. 
+
+Check your understanding of the key concepts in this output. 
+
+```{r quiz-silene5a}
+    question_text("What is the value of the standard error of the regression slope (rounded to 2 decimal places)?",
+    answer("0.68", correct = T),
+    answer(".68", correct = T),
+    incorrect = "Did you round to 2 decimal places?",
+    allow_retry=T)
+```
+
+```{r quiz-silene5b}
+    question_text("What is the value of the test statistic for the *t*-test of the regression slope (rounded to 2 decimal places)?",
+    answer("10.36", correct = T),
+    incorrect = "Did you round to 2 decimal places?",
+    allow_retry=T)
+```
+
+```{r quiz-silene5c}
+    question_text("What fraction of the total variance in hybrid sterility is explained by its association with genetic distance? Round your answer to 2 decimal places, and do not adjust for the regression degrees of freedom.",
+    answer("0.84", correct = T),
+    answer(".84", correct = T),
+    incorrect = "Did you round to 2 decimal places?",
+    allow_retry=T)
+```
+
+## Testing slopes: the ANOVA approach
+
+Now let's look at the ANOVA approach to testing the regression slope. 
+
+Don’t be misled by the terminology: while an ANOVA is a linear model with a categorical explanatory variable, the *analysis of variance* also refers more broadly to the partitioning of total variance in a response variable into its different sources. It applies to any linear model we've fitted. Here, it means we're partitioning total variance in hybrid sterility into the part explained by its association with genetic distance and an error or residual part. It *does not* mean we fitted an ANOVA *model* in the `lm()` step above. 
+
+All we need to do is pass the fitted model to the `Anova()` function of the *car* package like so: `Anova(silene.mod)`. Use the code chunk below to do this. Remember, output doesn't carry across tutorial chunks, so the regression model needs to be refitted in this chunk in order to pass it to the `Anova()` function in the same chunk. Just paste in the code used to the fit model before, then pass the model to the `Anova()` function using the code in the sentence above. 
+
+```{r silene6, exercise=TRUE}
+
+```
+
+This gives the same ANOVA table we got from this function last week. The first column lists the sources of variance that contribute to total variance in hybrid sterility (the part explained by its association with genetic distance and an unexplained residual part). Other columns list the sums of squares, degrees of freedom, and *F* statistic calculated in Activity 3 of the workshop handout, and `Pr(>F)` is the probability (`Pr`) of getting a test statistic (`F`) as extreme as the one observed if the null hypothesis is true. 
+
+Unlike the workshop handout, there's no row with the total sum of squares and no column with mean squares. But we saw in the workshop that they're easily derived from other quantities in the table, so R just omits redundant information here.
+
+In standard notebooks, the ANOVA table has some more bits of information. Above the table, R tells us we've done Type II tests (this relates to more complex models we'll cover in the final lab). And next to *P* values, R uses stars to indicate the significance level (one star means the *P*-value is significant at $\alpha$ = 0.05, and more stars mean it's significant at higher levels).
+
+Check your understanding of this output (use the spare chunk below the questions for any calculations if you wish). 
+
+```{r quiz-silene6a}
+    question_text("What is the value of the total sum of squares (rounded to 2 decimal places)?",
+    answer("5.19", correct = T),
+    allow_retry=T)
+```
+
+```{r quiz-silene6c}
+    question_text("What is the value of the mean square for the regression (rounded to 2 decimal places)?",
+    answer("4.34", correct = T),
+    allow_retry=T)
+```
+
+```{r quiz-silene6d}
+    question_text("What is the value of the residual (error) mean square (rounded to 2 decimal places)?",
+    answer("0.04", correct = T),
+    allow_retry=T)
+```
+
+```{r quiz-silene6e}
+question("Based on the test result, we:",
+    answer("reject the null hypothesis.", T),
+    answer("accept the null hypothesis.", message = "Remember: we never accept the null! This is because we might have rejected it if we’d had more statistical power"),
+    answer("fail to reject the null hypothesis.", message = "Remember: we only fail to reject the null if the *P*-value of the test statistic is > 0.05."),
+    allow_retry = T)
+```
+
+```{r silene6b, exercise=TRUE}
+
+```
+
+
+### Is it better to test the regression slope with a *t*-test or an *F*-test (the ANOVA approach)?
+
+The good news is *it doesn't matter*: the tests are equivalent and have identical *P*-values. The advantage of doing a *t*-test with the `summary()` function is that it gives parameter estimates (and their uncertainties) in addition to hypothesis tests. Those estimates are important for interpreting the direction and magnitude of the slope, and for predicting mean values of $Y$ from values of $X$ like we did above. The advantage of doing an *F*-test with the `Anova()` function applies to more complex models. 
+
+Any fitted model can be passed to the `summary()` function, but we'll see in Week 9 that the tests it gives are less helpful when explanatory variables are factors. For now, the key point is that *t*-tests (via `summary()`) and *F*-tests (via `Anova()`) are equally valid tests of regression slopes, but the `summary()` output gives additional information about them. 
+
+## Confidence in predictions
+
+The test result leads us to reject the null hypothesis and conclude that hybrid sterility is *significantly associated* with genetic distance (the slope of the line of best relating the two variables is *not 0*). The estimated slope of the line of best fit relating the two variables also tells us that sterility *increases* with genetic distance (the slope of the line is *positive*). 
+
+Before wrapping up this example, let's return to the idea that uncertainty in line estimation also affects the precision of predictions made from the line. A quiz question above asked what proportion of pollen are predicted to be sterile, on average, in hybrid offspring from species with a genetic distance of 0.15. The answer was 1.48, but **how confident can we be in this prediction** in light of uncertainty in estimation?  
+
+We can get a sense of this by revisiting the plot of hybrid sterility against genetic distance, and inspecting the 95% confidence interval around the line of best fit relating them (in grey below). The interval didn't appear for some of the TAs: if it doesn't appear for you, see *figure-2.pdf* attached to this project. 
+
+<br>
+
+```{r echo=FALSE, fig.height = 4.5, fig.width = 4.5, fig.align = 'center', fig.cap="**Figure 2. Hybrid sterility plotted against genetic distance in *Silene* species, showing the 95% confidence interval around the line of best fit relating the two variables.**"}
+ggplot(data = silene, mapping = aes(y = propSterile, x = geneticDistance)) + 
+       geom_smooth(method=lm, formula=y~x, colour="red3", size=1) +
+       geom_point(colour = "dodgerblue3", size=1.5) + 
+       scale_x_continuous(name = "Genetic distance", limits=c(0,0.2), breaks = c(0.00, 0.05, 0.10, 0.15, 0.20), expand = expansion(add = c(0.01, 0))) + 
+       coord_cartesian(ylim = c(0, 1.6)) + 
+       scale_y_continuous(name = "Proportion of pollen sterile", breaks = c(0, 0.4, 0.8, 1.2, 1.6), expand = expansion(add = c(0, 0))) + 
+       theme_classic() +
+       theme(axis.title=element_text(size=10, face="bold"), # axis titles
+             axis.text=element_text(size=10),
+             plot.margin = unit(c(t=0.3, r=0.5, b=0.1, l=0.1), "cm"), 
+             axis.line = element_line(colour = 'black', size = 0.25), 
+             axis.ticks = element_line(colour = "black", size = 0.25))
+```
+<br>
+
+If we look at this interval when genetic distance is 0.15, it tells us we can be 95% confident that the true proportion of sterile pollen lies between ~1.3 and ~1.6. These values are the lower and upper limits of the interval based on eyeballing it, but a better option is to use R's `predict()` function. It takes a fitted model and one or more new values of $X$, and returns predictions of $Y$ along with their 95% confidence intervals. This is similar to calculating measures of uncertainty (standard errors or confidence intervals) for estimates of interest (like group means). Technically though, *estimates apply to parameters* whereas *predictions apply to response variables*. 
+
+The code below shows how to use the `predict()` function by passing several arguments to it. In this code:
+
+* the first argument is the fitted model;
+* the second argument is a list of new data with the value(s) of $X$ to predict value(s) of $Y$ for;
+* the third argument specifies a *confidence* interval (other intervals exist but are beyond our scope);
+* the fourth argument specifies a *95%* interval, which is the level used by convention. 
+
+```{r echo=TRUE, eval=FALSE}
+#predict compute the 95% confidence interval for the prediction
+predict(silene.mod, 
+        newdata = list(geneticDistance = c(0.10)), 
+        interval = "confidence",  
+        level = 0.95)
+```
+
+<br>
+Use the code chunk below to predict the proportion of pollen that will be sterile, on average, in hybrid offspring from species with a genetic distance of 0.10, and compute the 95% confidence interval for the prediction. Remember, output doesn't carry across tutorial chunks, so the regression model needs to be refitted in this chunk in order to pass it to the `predict()` function in the same chunk. Just paste in the code used to the fit model before, then pass the model to the `predict()` function using the code in the chunk above. 
+
+```{r silene7, exercise=TRUE}
+
+```
+
+Check your understanding of the output, which should match the line and confidence interval in Figure 2 (if you're wondering what `fit` means, remember that predicted values and fitted values are the same thing). 
+
+```{r quiz-silene7a}
+    question_text("What proportion of pollen are predicted to be sterile, on average, in hybrid offspring from species with a genetic distance of 0.10? Round your answer to 2 decimal places.",
+    answer("1.13", correct = T),
+    incorrect = "Did you round to 2 decimal places, and use the correct value of $X$?",
+    allow_retry=T)
+```
+
+```{r quiz-silene7b}
+    question_text("What is the lower limit (rounded to 2 decimal places) of the 95% confidence interval for this prediction?",
+    answer("1.03", correct = T),
+    incorrect = "Did you round to 2 decimal places, and use the correct value of $X$?",
+    allow_retry=T)
+```
+
+```{r quiz-silene7c}
+    question_text("What is the upper limit (rounded to 2 decimal places) of the 95% confidence interval for this prediction?",
+    answer("1.22", correct = T),
+    incorrect = "Did you round to 2 decimal places, and use the correct value of $X$?",
+    allow_retry=T)
+```
+
+As we can see, `predict()` lets us make predictions from a line of best fit estimated by regression *and* quantify the precision (or uncertainty) of our predictions. Uncertainty in predictions is important to report for the same reason we report uncertainty in parameter estimates (like group means): to account for chance events during sampling.
+
+## Example: body and brain size
+
+Okay, now let's try another example. All of the code you need to complete the following exercise is given above (or at the end of the tutorial if you wish to re-plot Figure 3),
+
+Larger animals tend to have larger brains, but is the increase in brain size proportional to the increase in body size? Observations of mean body size (`bodymass` in kg) and brain size (`brainmass` in g) for 62 mammal species have been pre-loaded for you using the first bit of code in the chunk below. Both variables have also been ln-transformed (to`lnbodymass` and `lnbrainmass`) using the second bit of code in the chunk. Each species is a replicate observation, so the data file also has an identifier variable containing species names (`name`) for the sake of housekeeping.
+
+```{r echo=TRUE, eval=FALSE}
+#import mammal data
+mammals <- read_csv("./mammals.csv",
+                     col_name = TRUE, na = c("NA"), #columns have names and NAs are missing values
+                     col_types = list(bodymass = col_double(),  #sets 'bodymass' as numeric
+                                      brainmass = col_double()))  #sets 'brainmass' as numeric
+
+#ln-transform 'bodymass' and 'brainmass'
+mammals <- mammals %>% #use this data and save results to it
+  mutate(lnbodymass = log(bodymass),  #transform ''bodymass' and store as 'lnbodymass'
+         lnbrainmass = log(brainmass)) #transform 'brainmass' and store as 'lnbrainmass'
+```
+
+<br>
+To inspect the data, type `mammals` into the code chunk below, then click the "Run code" button at the top right of the chunk. You can navigate through the data using the arrow buttons and "Previous/Next" buttons. Is everything as it should be (i.e. are variables set to the correct types)? 
+
+```{r mammals1a, exercise=TRUE}
+
+```
+
+<br>
+
+Figure 3 now visualises the relationship of interest. As always, the code to make this figure is reproduced at the end of the tutorial if you are interested, but it's not important right now.
+
+<br>
+
+```{r echo=FALSE, fig.height = 4.5, fig.width = 4.5, fig.align = 'center', fig.cap="**Figure 3. Brain size (mass in g) plotted against body size (mass in kg) for 62 mammal species.**"}
+ggplot(data = mammals, mapping = aes(y = bodymass, x = brainmass)) + 
+       geom_smooth(method=lm, formula=y~x, colour="red3", size=1) +
+       geom_point() + 
+       scale_x_continuous(name = "Body size (kg)") + 
+       scale_y_continuous(name = "Brain size (g)") + 
+       theme_classic()
+```
+<br>
+
+Observations are very clustered, and a couple of them have extreme values of body size especially. However, it's unclear whether those observations are outliers (remember, outliers are extreme values of the *response variable* and will therefore have large residuals; they are not extreme values of the *explanatory variable*). We also have no reason to think that those observations are biologically implausible, so aren't justified in removing them from the data. 
+
+<br>
+**Stating the hypotheses**  
+
+```{r quiz-mammalsa}
+question("Which of the following statements of the null hypothesis are valid? Check all that apply.",
+    answer("The null hypothesis is that body size and brain size are associated.", message = "The null always states that there is no relationship, effect, or difference. This is the *alternative* hypothesis."),
+    answer("The null hypothesis is that body size and brain size are not associated.", correct = T),
+    answer("The null hypothesis is that $\\beta$, the slope of the line relating body size to brain size, is not 0."),
+    allow_retry=T)
+```
+ 
+```{r quiz-mammalsb}
+question("Which of the following statements of the alternative hypothesis are valid? Check all that apply.",
+    answer("The alternative hypothesis is that body size and brain size are associated.", correct = T),
+    answer("The alternative hypothesis is that body size and brain size are not associated.", message = "The alternative hypothesis always states that there *is* a relationship, effect, or difference. This is the *null* hypothesis."),
+    answer("The alternative hypothesis is that $\\beta$, the slope of the line relating body size to brain size, is not 0.", correct = T),
+    allow_retry=T
+    )
+```
+
+<br>
+**Fitting the model**
+
+Use the code chunk below to fit a linear regression that can evaluate the null hypothesis, and call diagnostic plots to check the assumptions made by the regression model. You'll find all of the code you need in the *Silene* example above. See if you can adapt it yourself to complete the example here. 
+
+```{r mammals1b, exercise = TRUE}
+
+```
+
+```{r quiz-mammals1a}
+    question("Which of the following statements do you think are correct? Check all that apply.",
+    answer("None of the assumptions of regression appear to be violated."),
+    answer("It is unclear if $Y$ is linearly related to $X$ because residuals in the residual plot are so clumped.", correct = T),
+    answer("Residuals don't form a symmetrical cloud in the residual plot, suggesting that values of $Y$ aren't normally distributed at all values of $X$.", correct = T),
+    answer("The curvature of residuals in the Q-Q plot also suggests that values of $Y$ aren't normally distributed at all values of $X$.", correct = T),
+    answer("The spread of residuals above and below 0 in the residual plot suggests that values of $Y$ don't have equal variance at all values of $X$.", correct = T),
+    allow_retry=T)
+```
+
+<br>
+Repeat the previous steps (fitting and checking the regression model) using transformed data for one or both variables until you find an appropriate model that adequately meets the assumptions of regression (remember, don't expect perfection: we can expect linear models to be robust to violations that aren't too drastic). Transformations of both variables are already in the data file for you to use. Start by transforming the response variable, then transform the explanatory variable too if necessary. You have several empty code chunks to work with. Use as many or as few of them as you wish.
+
+```{r mammals2, exercise = TRUE}
+
+```
+
+```{r mammals3, exercise = TRUE}
+
+```
+
+```{r mammals4, exercise = TRUE}
+
+```
+
+<br>
+Once you have found the appropriate model, use it to answer the following questions. **Base your answers on the transformed scale**. This is almost always acceptable to do in reports and research articles, as long as we state that results are based on transformed data and the type of transformation used (alternatively, we can back-transform results to the original scale, but that's beyond our scope).
+
+```{r quiz-mammals4a}
+    question_text("What is the estimate (rounded to 2 decimal places) of the regression slope relating brain size to body size?",
+    answer("0.75", correct = T),
+    answer(".75", correct = T),
+    allow_retry=T)
+```
+
+```{r quiz-mammals4b}
+    question_text("What is the standard error (rounded to 2 decimal places) of this estimate?",
+    answer("0.03", correct = T),
+    answer(".03", correct = T),
+    allow_retry=T)
+```
+
+```{r quiz-mammals4c}
+    question_text("What fraction of the total variance in brain size is explained by its association with body size, adjusted for degrees of freedom used by the regression? Round your answer to 2 decimal places.",
+    answer("0.92", correct = T),
+    answer(".92", correct = T),
+    incorrect = "Did you round to 2 decimal places?",
+    allow_retry=T)
+```
+
+```{r quiz-mammals4d}
+question("Is the association between brain size and body size statistically significant, warranting rejection of the null hypothesis?",
+    answer("Yes", correct = T),
+    answer("No"),
+    allow_retry = T)
+```
+
+```{r quiz-mammals4g}
+    question("Based on the test result, we can conclude that brain size increases significantly in proportion to body size in mammals.",
+    answer("True."), message = "Not quite. The test result only tells us that the association is not 0 (we need the estimated slope to tell us the *direction* of the association.",
+    answer("False.", correct = T, message = "Correct! The conclusion is based on the estimated slope *and* the hypothesis test of the slope."),
+    allow_retry=T)
+```
+
+<br>
+<div class="alert alert-info">
+**Well done! You have now finished the tutorial. Be sure to check anything that didn't make sense with one of the teaching team.**  
+<br>
+**A reminder of the learning outcomes for this week.**   
+
+* Recognise linear regression as an example of a linear model.
+* Use linear regression to predict $Y$ based on $X$.
+* Test the null hypothesis that the regression slope is zero.
+* Use diagnostic plots to test the assumptions of regression.
+
+<br>
+**A note on checking assumptions.**   
+Lots of people worry about checking assumptions at first, simply because diagnostic plots are somewhat subjective. At the risk of being repetitive, don't expect perfection! Small deviations from the ideal patterns are expected and okay, whereas violations like those in the last example warrant action. There's lots of room in between, and you'll develop good judgement with practice.
+
+</div>
+
+#### Code for Figures 1 and 2.
+Figures only differ in the second line of code, where `se = TRUE` for Figure 1 and `se = FALSE` for Figure 2.
+
+```{r echo=TRUE, eval=FALSE}
+ggplot(data = silene, mapping = aes(y = propSterile, x = geneticDistance)) + 
+       geom_smooth(method=lm, formula=y~x, colour="red3", size=1, se = TRUE) + #change to 'se = FALSE' to remove the confidence interval
+       geom_point(colour = "dodgerblue3", size=1.5) + 
+       scale_x_continuous(name = "Genetic distance", limits=c(0,0.2), breaks = c(0.00, 0.05, 0.10, 0.15, 0.20), expand = expansion(add = c(0.01, 0))) + 
+       coord_cartesian(ylim = c(0, 1.6)) + 
+       scale_y_continuous(name = "Proportion of pollen sterile", breaks = c(0, 0.4, 0.8, 1.2, 1.6), expand = expansion(add = c(0, 0))) + 
+       theme_classic() +
+       theme(axis.title=element_text(size=10, face="bold"), # axis titles
+             axis.text=element_text(size=10),
+             plot.margin = unit(c(t=0.3, r=0.5, b=0.1, l=0.1), "cm"), 
+             axis.line = element_line(colour = 'black', size = 0.25), 
+             axis.ticks = element_line(colour = "black", size = 0.25))
+```
+
+#### Code for Figure 3.
+
+```{r echo=TRUE, eval=FALSE}
+ggplot(data = mammals, mapping = aes(y = bodymass, x = brainmass)) + 
+       geom_smooth(method=lm, formula=y~x, colour="red3", size=1) +
+       geom_point() + 
+       scale_x_continuous(name = "Body size (kg)") + 
+       scale_y_continuous(name = "Brain size (g)") + 
+       theme_classic()
+```

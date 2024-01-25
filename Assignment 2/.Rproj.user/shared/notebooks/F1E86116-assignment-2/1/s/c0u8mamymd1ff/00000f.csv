@@ -1,0 +1,7 @@
+"0","# Use this chunk to complete Exercise 2"
+"0","flies %>%"
+"0","  group_by(food) %>%"
+"0","  summarise(mean = mean(eyeSpan),"
+"0","              n = n(),"
+"0","              sd = sd(eyeSpan, na.rm = TRUE),"
+"0","              se = sd/sqrt(n))"

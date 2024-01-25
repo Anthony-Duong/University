@@ -1,0 +1,362 @@
+---
+title: 'Assignment 3: Statistical analysis I'
+output:
+  html_notebook:
+    theme: spacelab
+  pdf_document: default
+---
+
+<!-- 
+#####################################################################################
+#####################################################################################
+###                                                                               ###
+###  READ THE INSTRUCTIONS BELOW FOR COMPLETING THE ASSIGNMENT IN THIS NOTEBOOK,  ###
+###              THEN CREATING A PDF OF THIS NOTEBOOK FOR SUBMISSION.             ###
+###                                                                               ###
+#####################################################################################
+#####################################################################################
+--> 
+
+* * *
+
+This assignment focuses on problems relating to basic statistics (Week 6) and single-factor ANOVA (Week 7). It involves identifying and applying appropriate statistical analyses to the data provided, interpreting the outcomes of analyses, and linking outcomes to the biological questions motivating them. It forms 10% of the overall grade for BIO2010 and is due **11:55 PM on Friday September 24 (Week 9)**.
+
+**To complete the assignment:**
+
+* get answers by running the required R code in the code chunks provided (remember, you can run each chunk by clicking the green triangle at the top right of the chunk)
+* type answers in the spaces also provided (marks are based on those written answers, but including your code helps markers understand how you got them)
+* save your work as you go (press Command/Control-s, click File > Save, or click the disc icon in the toolbar).
+
+**To create a PDF of the assignment for submission:**
+
+* create an HTML file and open it in a browser (click *Preview* in the toolbar and *Open in Browser* at the top left of the file), then save as a PDF (click File > Print > Save as PDF > Save); or
+* create a Word document (click the arrow next to *Preview* in the toolbar and select *Knit to Word*), then save or export as a PDF.  
+
+**Check that your PDF displays all information correctly then upload it to the Moodle Dropbox.**   
+
+
+```{r setup, include=FALSE}
+
+# DON'T CHANGE ANYTHING IN THIS CHUNK (include=false tells RStudio to run the code but exclude the chunk from HTML output)
+
+# load required packages
+library(tidyverse)
+library(ggResidpanel)
+library(car)
+library(emmeans)
+```
+
+* * *
+
+## Problem set 1: Food and stalk-eyed flies
+
+Stalk-eyed flies (*Cyrtodiopsis dalmanni*) have eyes at the ends of long stalks that extend horizontally from each side of the head. Longer eye spans (measuring the combined lengths of stalks) enhance attractiveness to mates and success in competitive interactions. Is eye span affected by the quality of food that flies eat? To find out, researchers reared two groups of flies on different foods, then recorded each fly's eye span in millimetres. One group was fed corn (a high-quality food), while the other was fed cotton wool (a low-quality food). Each fly was reared singly and therefore represents an independent sampling unit. The data are contained in the file 'flies.csv', which you can load by running the chunk below. 
+
+```{r}
+# Run this chunk to load the data for Problem set 1
+flies <- read_csv("./flies.csv", 
+                  col_names = TRUE, na = "NA",
+                  col_types = list(food = col_factor(),
+                                   eyeSpan = col_double()))
+glimpse(flies, width = 75)
+```
+
+
+**EXERCISE 1: Based on the research description above, what are the null and alternate hypotheses of interest? (1 MARK)**  
+
+
+H0 food quality does not affect mean eye span (or means are equal, or the difference between means is 0) (0.5)
+
+HA:food quality does affect mean eye span (or means aren't equal, or the difference between means is not 0) (0.5)
+
+The alternate hypothesis should be non-directional (two-sided) because there is no a-priori reason to exclude a response to diet in either direction (eating high-quality food could increase or decrease eyespan).
+
+
+**EXERCISE 2: Report (with standard errors) the estimates that are the focus of the hypotheses above. You can work out your answer using the chunk below. (1 MARK)**  
+
+corn	 	2.047143	0.01630283	(0.25 each)
+cotton	1.542917	0.05816169	(0.25 each)
+
+```{r}
+# Use this chunk to complete Exercise 2
+
+#summary statistics
+flies %>% #the data to use
+  group_by(food) %>% #group data by colour
+  summarise(reps = sum(!is.na(eyeSpan)), #compute the sample size
+            mean = mean(eyeSpan, na.rm = TRUE), #compute the mean size
+            se = sd(eyeSpan, na.rm = TRUE)/sqrt(reps)) #compute the standard error
+```
+
+
+**EXERCISE 3: What is the appropriate statistical analysis for testing the null hypothesis, and why? Give 3 reasons to justify your answer. You can work out your answer using the chunk below, and you can also assume that the numerical variable has a normal distribution. (4 MARKS)**  
+
+A Welch two-sample t-test (or Welch's t-test, or Welch's approximate t-test) for 1 mark. 
+If they answer just a plain two-sample t-test they can have 0.5 of a mark, but it means they didn't check the assumption that groups have equal variances (which is badly violated in this case). 
+
+They can justify their answer with correct 3 reasons (1 mark each) based on the goal of a two-sample test and the test assumptions. They can assume normality of the response, independence of groups is implied by the research description, and they should have evaluated (by plotting or an F-test) equality of variance to justify the Welch test. If they miss the Welch test, they can get some marks for other justifications (use some discretion here) but cannot get all 3 marks without correctly evaluating the assumption of equal variance. 
+
+
+```{r}
+# Use this chunk to complete Exercises 3, 4, and 5
+
+#try a two-sample t-test
+t.test(eyeSpan ~ food, 
+       data = flies,
+       alternative = "two.sided",
+       var.equal = T)
+
+#check for equal variances
+var.test(eyeSpan ~ food, 
+        data = flies,) #specifies the data to use
+
+#move to Welch two-sample t-test
+t.test(eyeSpan ~ food, 
+       data = flies,
+       alternative = "two.sided",
+       var.equal = F)
+```
+
+**EXERCISE 4: After running the appropriate statistical analysis (you can do this in the chunk above), do you reject or fail to reject the null hypothesis, and why? Explain what this indicates about the relationship between food and eye span in stalk-eyed flies. (2 MARKS)**
+
+The null is rejected because there's less than a 5% probability of getting a t-value as extreme as the one observed if the null is true. (1 mark)
+
+Rejecting the null indicates that food quality significantly affects the mean eye span of flies (the difference in mean eye span between flies reared on low-quality vs high quality food is not 0). They can infer the direction of the effect based on their estimates in Q2, or they can state that no direction can be inferred from rejecting the null on its own. Either option is fine (1 mark) as long they say something reasonable about the relationship (simply stating that there IS a relationship falls short of full marks).
+
+**EXERCISE 5: Based on the research description and your assessment of the data, write a brief report of the results as though it was your own study. Follow the guidelines in the week 7 workshop handout for reporting the results of any statistical analysis, providing all information necessary for readers to understand and properly evaluate the research outcomes. There is no minimum or maximum word limit, but a few sentences should suffice. (4 MARKS)** 
+
+Here's what's in the week 7 workshop handout (suggested marking scheme follows after)
+
+When writing a paper or report, the results section describes your findings and reports the outcomes of all statistical analyses. It should be concise and limited in interpretation (avoid discussing whether results are good, bad, expected, or unexpected – save that for the discussion). 
+
+A general structure for the results of any statistical analysis includes:
+•	reporting summary statistics (estimates of group means and their SEs) that relate to the hypotheses being tested, or referring to those statistics in tables or figures;
+•	stating how hypotheses of interest were tested; 
+•	giving the key details of each test (test statistic, df, P-value), including any post-hoc tests needed to identify significant differences between specific groups (we’ll cover this in the lab);
+•	summarising (in text) all relevant patterns in tables and figures, and all conclusions supported by test outcomes.
+
+For example (and excluding post-hoc tests for now):
+
+Means and standard errors for days to hatching at different incubation temperatures (Figure 1) suggested an effect of temperature on hatching time, which was statistically supported by the results of a single-factor ANOVA (F = 15.98; df = 3, 36; P < 0.001). Overall, eggs took the most days to hatch when incubated at 15°C, and the least days to hatch when incubated at 30°C.
+
+There are a few ways to give a good answer (so you can use some discretion), but here's what they should be aiming for:
+
+An explanation of the estimates/summary statistics relevant to the hypothesis being tested (1 mark)
+Something about the test done to test the hypothesis (0.5) and correct reporting of key details (test statistic, df, and P-value (0.5 each) 
+Some kind of conclusion (1 mark)
+
+* * *
+ 
+## Problem set 2: Parasites and traffic accidents
+
+The parasite *Toxoplasma gondii* infects warm-blooded vertebrates, including 30–60% of humans in most countries. A short phase of acute infection is followed by a latent phase (life-long presence of *Toxoplasma* cysts in nerve and muscle tissues) during which infected subjects are considered to be asymptomatic. Researchers noticed, however, that some subjects with latent infections had longer reaction times in laboratory tests, and speculated that latent infection might influence the performance of subjects in real-life situations.
+
+To find out, the researchers surveyed a sample of 15- to 29-year-old drivers from Prague who had been involved in traffic accidents. Each driver had been given a blood test at the time (to rule out intoxication) that revealed any latent infection by *Toxoplasma*. The researchers also surveyed a control sample of drivers of the same age living in the same area who had not been in any accidents. The data are contained in the file 'drivers.csv', which you can load by running the chunk below. 
+
+```{r}
+# Run this chunk to load the data for Problem set 2
+drivers <- read_csv("./drivers.csv", 
+                    col_names = TRUE, na = "NA",
+                    col_types = list(infectionStatus = col_factor(),
+                                     accidentStatus = col_factor()))
+glimpse(drivers, width = 75)
+
+library(ggmosaic)
+
+ggplot(data = drivers) +
+  geom_mosaic(aes(x = product(accidentStatus, infectionStatus), fill = accidentStatus)) +   
+  labs(y="accidentStatus", x="infectionStatus") +
+  theme_bw() +
+  theme(legend.position="none")
+
+
+```
+
+**EXERCISE 6: Based on the research description above, what are the null and alternate hypotheses of interest? (1 MARK)**  
+
+
+HO: involvement in accidents is independent of infection status (or the fraction of drivers in accidents is the same for infected and uninfected drivers) (0.5)
+HO: involvement in accidents is not independent of infection status (or the fraction of drivers in accidents differs between infected and uninfected drivers) (0.5)
+
+
+**EXERCISE 7: Based on the research description above, what is the response variable, what is the explanatory variable, and is each variable categorical or numerical? (1 MARK)**  
+[Enter your response here.]
+
+Response variable: accident status (0.5)
+Explanatory variable: infection status (0.5)
+
+
+**EXERCISE 8: What is the appropriate statistical analysis for testing the null hypothesis, and why? Give 3 reasons to justify your answer. You can work out your answer using the chunk below. (4 MARKS)**  
+
+
+For 1 mark: 
+A chi-squared test of a contingency table, chi-squared contingency test, chi-squared test of independence, or two-sample chi-squared test are all fine for 1 mark (they CAN ALSO get a mark for a chi-squared test or goodness-of-fit test GIVEN THE TUTORIAL NOTES ARE AMBIGUOUS, but strictly speaking this can apply without a contingency table or groups in an explanatory variable)
+
+They can also say Fishers' exact test (but still need to apply the test to a contingency table, or groups in an explanatory variable).
+
+For 3 marks
+They can justify their answer based on the goal of the test, and the assumptions it makes.
+The assumptions in the textbook and tutorial are that no more than 20% of cells have an expected frequency of less than 5, and no cell has an expected frequency of less than 1. They should mention these (which means checking the expected frequencies of cells in the contingency table as done in the tutorial)
+
+Someone on the forum asked about an assumption of independence of observations -- this is fine as one reason, but they cannot get full marks without checking expected frequencies 
+
+```{r}
+# Use this chunk to complete Exercises 8, 9, and 10
+
+#make the contingency table
+contingency_table <- table(drivers$infectionStatus, drivers$accidentStatus) #make the table and name it 'contingency_table`
+contingency_table #show the table
+
+#apply a chi-squared test to the table
+chisq.test(x = contingency_table, #states the contingency table to use
+           correct = FALSE) #tells R not to make a continuity correction -- don't penalise if this is set to TRUE (the default)
+
+#call expected frequencies to check assumptions
+chisq.test(x = contingency_table, #states the contingency table to use
+           correct = FALSE)$expected #tells R not to make a continuity correction -- don't penalise if this is set to TRUE (the default)
+
+#or apply a Fisher's exact test to the table
+fisher.test(x = contingency_table)
+
+```
+
+**EXERCISE 9: After running the appropriate statistical analysis (you can do this in the chunk above), do you reject or fail to reject the null hypothesis, and why? Explain what this indicates about the relationship between *Toxoplasma* infection and traffic accidents. (2 MARKS)**
+
+The null is rejected because there's less than a 5% probability of getting a chi-squared value as large as the one observed if the null is true (1 mark)
+
+Rejecting the null indicates that infection significantly affects the fraction of drivers who have accidents (the difference in this fraction between infected and uninfected drivers is not 0). They weren't asked to estimate those fractions, but they can infer the direction of the effect based on their contingency table (the fraction of drivers who have accidents is significantly larger for infected individuals than for uninfected individuals) or they can state that no direction can be inferred from rejecting the null on its own. Either option is fine (1 mark) as long they say something reasonable about the relationship (simply stating that there IS a relationship falls short of full marks).
+
+
+**EXERCISE 10: Based on the research description and your assessment of the data, write a brief report of the results as though it was your own study. Follow the guidelines in the week 7 workshop handout for reporting the results of any statistical analysis, providing all information necessary for readers to understand and properly evaluate the research outcomes. There is no minimum or maximum word limit, but a few sentences should suffice. (4 MARKS)** 
+
+Same as for exercise 5. 
+They may find it tricky to work out that the fraction of drivers who have accidents is significantly larger for infected individuals than for uninfected individuals, but this is a key inference for full marks. They haven't been guided to it (like they were for means in Problem sets 1 and 3), so it may be useful for spreading out marks if a bit clumped. 
+
+* * *
+ 
+## Problem set 3: Maths and readers' study areas
+
+Does adding maths to a scientific paper make readers think that it has more value, or does it depend on the reader's study area? Researchers sent two abstracts of scientific papers to each of 200 people with postgraduate degrees. Before sending the two abstracts to each person, the researchers chose one of the abstracts at random and added a meaningless sentence describing an unrelated mathematical model (the maths itself wasn't meaningless, but it had no conceptual link to the subject matter of the abstract). The other abstract had no maths added. 
+
+Participants were asked to score the quality of the research in each abstract on a scale from 1 to 100, and to also state the study area of their postgraduate degree: science including maths and technology (Sci); medicine (Med): humanities including social science (Hum); or other (Other). Then, for each person, the researchers calculated the perceived advantage of adding maths to a paper (mathsAdvantage) as the score for the abstract with maths added minus the score for the abstract without maths added. The data are contained in the file 'maths.csv', which you can load by running the chunk below. 
+
+```{r}
+# Run this chunk to load the data for Problem set 3
+maths <- read_csv("./maths.csv", 
+                  col_names = TRUE, na = "NA",
+                  col_types = list(degree = col_factor(),
+                                   mathsAdvantage = col_double()))
+glimpse(maths, width = 75)
+```
+
+**EXERCISE 11: Based on the research description above, what are the null and alternate hypotheses of interest? (1 MARK)**  
+
+HO: study area (degree) does not change the mean effect of adding maths to a paper (or the mean advantage is equal for all backgrounds, or variance in the mean advantage among backgrounds is 0) (0.5)
+
+HA: study area (degree) does change the mean effect of adding maths to a paper (or the mean advantage is not equal for all backgrounds, or variance in the mean advantage among backgrounds is not 0) (0.5)
+
+**EXERCISE 12: Report (with standard errors) the estimates that are the focus of the hypotheses above. You can work out your answer using the chunk below. (1 MARK)**  
+
+(0.25 per group)
+
+Hum	   	6.8333333	2.031369	
+Med	    3.0625000	3.997362	
+Other	 11.6451613	3.358363	
+Sci	   -0.7681159	1.994787	
+
+```{r}
+# Use this chunk to complete Exercise 12
+
+#summary statistics
+maths %>% #the data to use
+  group_by(degree) %>% #group data by colour
+  summarise(reps = sum(!is.na(mathsAdvantage)), #compute the sample size
+            mean = mean(mathsAdvantage, na.rm = TRUE), #compute the mean size
+            se = sd(mathsAdvantage, na.rm = TRUE)/sqrt(reps)) #compute the standard error
+```
+
+**EXERCISE 13: What is the appropriate statistical analysis for testing the null hypothesis? What assumptions does the analysis make, and do you think those assumptions are adequately met in this case? Explain why or why not. You can work out your answer using the chunk below. (4 MARKS)**
+
+For 1 mark:
+A single-factor ANOVA (1 mark). They ultimately need follow-up comparisons adjusted for multiple testing, but a single factor ANOVA is all that's needed to test the null here
+
+For 3 marks: 
+They should give the 3 non-trivial assumptions and demonstrate appropriate checking of them (they don't need all the info below -- it's just so you don't have to look it up). 
+
+Assumptions of ANOVA: 
+*Y* is linearly related to the explanatory variable (though this is trivial for ANOVA)
+values of *Y* are normally distributed for all groups in the factor
+values of *Y* have equal variance for all groups in the factor
+values of *Y* are randomly sampled for all groups in the factor).
+
+They can check assumptions using a residual plot.
+* If the response variable (*Y*) is linearly related to the factor, then residuals will show little curvature from left to right along the horizontal axis. 
+* If values of *Y* are normally distributed for all groups in the factor, then residuals will form a roughly symmetrical cloud around 0. 
+* If values of *Y* have equal variance for all groups in the factor, then residuals will have roughly equal spread above and below 0. 
+* If values of *Y* are randomly sampled (and thus independent) for all groups in the factor, then residuals will show little association with other residuals or predicted values. 
+
+They can also check normality using a Q-Q plot.
+If values of *Y* are normally distributed for all groups in the factor, then residuals will *roughly* follow a straight diagonal line.
+
+Assumptions appear to be adequately met in this case. Variance is slightly unequal (but within the roughly tenfold threshold stated in the textbook and Week 7 tutorial) and wobbles in the Q-Q plot are only minor. They should not need to transform data. 
+
+
+```{r}
+# Use this chunk to complete Exercises 13 and 14 (results here will also help you to answer Exercise 16)
+
+#fit the ANOVA model
+maths.mod <- #saves the model
+  lm(mathsAdvantage ~ degree, #specifies the model formula
+     data = maths, #specifies the data to use
+     contrasts = list(degree = "contr.sum")) #specifies sum-to-zero contrasts
+
+#check model assumptions
+resid_panel(maths.mod, plots = c("resid", "qq"))
+
+#call the ANOVA table
+Anova(maths.mod, type = 2)
+
+```
+
+**EXERCISE 14: After running the appropriate statistical analysis (you can do this in the chunk above), do you reject or fail to reject the null hypothesis in EXERCISE 11, and why? Explain what this indicates about the effect of a reader's study area on the perceived advantage of adding maths to a paper. (2 MARKS)**
+
+The null is rejected because there's less than a 5% probability of getting an F-value as large as the one observed if the null is true. (1 mark)
+
+Rejecting the null indicates that the perceived advantage of adding maths is not the same for all readers (1 mark -- simply stating that there IS a relationship falls short of full marks). They can't infer which readers differ at this point, and shouldn't really attempt follow-up tests yet because this is not what the question asks. 
+
+
+**EXERCISE 15: The perceived advantage of adding maths to a paper differed significantly, on average, between readers from which study areas? You can work out your answer using the chunk below. (4 MARKS)**
+
+This should be pretty easy because I worded the question badly (I didn't ask for directions of effect, or to comment on which groups don't differ).
+
+These are the 6 contrasts (they lose 2 marks if they don't adjust for multiple testing):
+
+contrast    estimate   SE  df t.ratio p.value
+ Hum - Med       3.77 4.84 196   0.779  0.8640
+ Hum - Other    -4.81 3.73 196  -1.290  0.5705
+ Hum - Sci       7.60 2.88 196   2.636  0.0445
+ Med - Other    -8.58 5.46 196  -1.571  0.3978
+ Med - Sci       3.83 4.93 196   0.778  0.8645
+ Other - Sci    12.41 3.84 196   3.234  0.0078
+ 
+P value adjustment: tukey method for comparing a family of 4 estimates 
+
+
+The perceived advantage of adding maths to a paper differs significantly between readers with Science degrees compared to readers with Humanities degrees (2 marks), and between readers with Science degrees compared to readers with Other degrees (2 marks). 
+
+Flowing text isn't essential here as long as they do and interpret pairwise comparisons correctly (they can't just paste in the results -- give only 2 marks if they do). 
+
+```{r}
+# Use this chunk to complete Exercises 15 and 16
+
+#estimate marginal means for groups in 'temp' and save the output as 'means'
+means <- emmeans(maths.mod, specs = "degree")
+
+#do unplanned comparisons of groups in 'means', using Tukey's adjustment for multiple testing
+pairs(means, adjust = "tukey")
+```
+
+**EXERCISE 16: Based on the research description and your assessment of the data, write a brief report of the results as though it was your own study. Follow the guidelines in the week 7 workshop handout for reporting the results of any statistical analysis, providing all information necessary for readers to understand and properly evaluate the research outcomes. There is no minimum or maximum word limit, but a few sentences should suffice. (4 MARKS)** 
+
+Same as for exercise 5. For full marks, their conclusions should summarise the directions of effects for the contrasts above (i.e., that scientists perceive less advantage of adding maths compared to humanities and 'other' readers). 
+

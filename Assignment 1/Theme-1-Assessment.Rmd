@@ -1,0 +1,250 @@
+---
+title: "Theme 1 Assessment"
+author: "Anthony Duong"
+output:
+  html_notebook:
+    highlight: pygments
+    theme: spacelab
+---
+
+```{=html}
+<!-- 
+###########################################################
+#                                                         #
+#          READ THE INSTRUCTIONS FIRST BELOW              #
+# TO GENERATE A PDF VERSION OF THIS FILE FOR SUBMISSION   #
+#                                                         #
+###########################################################
+-->
+```
+This assignment involves processing provided data sets, understanding the experimental design, formulating a hypothesis, summarizing the data, and visualising the results. It forms 15% of the overall grade for BIO2010 and is due **Week 6 Friday 11:55 PM 2nd September**. To complete this assessment, you need to type your answers into the spaces provided and complete the R code (when necessary) in the code chunks provided in the document. As a reminder each code chunk can be run by clicking the **green triangle** at the top right of each chunk.
+
+**To save your work:**
+
+The R Notebook will produce a formatted html file once all code is run and the document is saved (Click the disk icon on the toolbar to save). You can then print this html file to pdf (i.e., first open in a browser, then File menu \> Print \> Select "Save as PDF" \> Save) and upload to Moodle Dropbox. **Make sure to check that the final generated pdf is all correct and complete. We need to see your code, output, and figures.**
+
+```{r setup, include=FALSE}
+# DO NOT ALTER CODE IN THIS CHUNK
+# include=false tells RStudio to run the code, but not print this section in the html output
+library(tidyverse)
+```
+
+------------------------------------------------------------------------
+
+## Problem set 1: Maize and malaria
+
+The pollen of the corn (maize) plant is known to be a source of food to larval mosquitoes of the species *Anopheles arabiensis*, the main vector of malaria in Ethiopia. The production of maize has increased substantially in certain areas of Ethiopia recently, and over the same time malaria has entered into new areas where it was previously rare. This raises the question, is the increase of maize cultivation partly responsible for the increase in malaria?
+
+One line of evidence is to look for a geographical association on a smaller spatial scale between maize production and malaria incidence. The data set "malaria-vs-maize.csv" contains information on several high-altitude villages in Ethiopia, with information about the level of cultivation of maize (low, medium, or high) and the rate of malaria per 10,000 people in each village.
+
+**EXERCISE 1: Formulate a hypothesis for this research project. Refer to Week 1 workshop for how to develop a hypothesis from a research question. (3 MARKS)**
+
+    Villages in high altitude areas of Ethiopia with increased maize cultivation experience a higher incidence of malaria than those with lower levels of cultivation.
+
+**EXERCISE 2: Is this an experimental study or an observational study? Explain the basis for your answer. (2 MARKS)**
+
+    This is an observational study, since we are drawing conclusions from a survey dataset rather than applying any intervention treatment to affect the results and the maize cultivation levels were not randomly assigned to villages.
+
+**EXERCISE 3: Based on the description of the experiment, which is the response variable and which is the explanatory variable? Are they categorical or numerical? (2 MARKS)**
+
+    The response variable is incidence and the explanatory variable is the level of maize cultivation. Both variables are numerical, but both could be converted to categorical data
+
+```{r}
+#Run this chunk to load the data.
+maize_data <- read_csv("./malaria-vs-maize.csv", 
+                       col_names = TRUE, 
+                       na = "NA",
+                       col_types = list(villages = col_character(),
+                                        maize_yield = col_factor(c("Low", 
+                                                                   "Medium", 
+                                                                   "High")),
+                                        incidence_rates = col_integer()))
+
+glimpse(maize_data, width = 75)
+```
+
+```{r}
+maize_data
+
+```
+
+**EXERCISE 4: Use the raw data to quantify for which level of maize cultivation due we see the greatest differences amongst villages on average (1 MARK)**
+
+    High maize cultivation has the highest standard error, which is the greatest difference amongst villages on average, accounting for the number of villages.
+
+**EXERCISE 5: In which level of maize cultivation is the estimate for the mean rate of malaria the most precise. Explain your answer. Describe the precision by also calculating a 95% confidence interval for the mean in this case. (2 MARKS)**
+
+    Low yield is the most precise 95%CI (4.01, 31.33), meaning that we are 95% sure that the mean of low maize cultivation is between 4.01 andd 31.33. Medium and high yield have wider confidence intervals, showing we have a large range where the mean could actually lie.
+
+**EXERCISE 6: As mentioned above, the data set contains information on the level of cultivation of maize and the rate of malaria per 10,000 people in each village. What is the unit of replication in this dataset (e.g., country, altitude region, village, or person), and how many independent replicates are there in total? (2 MARKS)**
+
+    The unit of replication is village and there are 20 independant replicates in total
+
+```{r}
+# Use this chunk for Exercise 4-6
+# Exercise 4 
+high_yield <- maize_data %>% 
+  filter(maize_yield == "High") %>%
+  summarise(mean = mean(incidence_rates, na.rm = TRUE),
+            n = length(villages),
+            sd = sd(incidence_rates, na.rm = TRUE),
+            se = sd/sqrt(n),
+            CI_lower = mean - 1.96*se,
+            CI_upper = mean + 1.96*se)
+
+med_yield <- maize_data %>% 
+  filter(maize_yield == "Medium") %>%
+   summarise(mean = mean(incidence_rates, na.rm = TRUE),
+            n = length(villages),
+            sd = sd(incidence_rates, na.rm = TRUE),
+            se = sd/sqrt(n),
+            CI_lower = mean - 1.96*se,
+            CI_upper = mean + 1.96*se)
+
+low_yield <- maize_data %>% 
+  filter(maize_yield == "Low") %>%
+    summarise(mean = mean(incidence_rates, na.rm = TRUE),
+            n = length(villages),
+            sd = sd(incidence_rates, na.rm = TRUE),
+            se = sd/sqrt(n),
+            CI_lower = mean - 1.96*se,
+            CI_upper = mean + 1.96*se)
+
+
+high_med <- full_join(x = high_yield, y= med_yield,)
+maize_summary <- full_join(x = high_med, y= low_yield)
+
+yield_level <- c('High', 'Medium', 'Low')
+
+maize_summary$yield_level <- yield_level
+
+maize_summary
+
+dim(maize_data)
+```
+
+**EXERCISE 7: Create a graph that effectively shows differences in the rates of malaria between the different levels of cultivation of maize. Make sure you follow the guidelines for appropriate and effective graphs covered in the Week 3 workshop. (4 MARKS)**
+
+```{r}
+# Use this chunk for Exercise 8.
+
+
+ggplot(maize_summary, aes(yield_level, mean)) + 
+  geom_point() +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper)) +
+  labs(x = "Maize Yield",
+       y="Malaria Incidence (per 10,000 people)")
+
+```
+
+**EXERCISE 8: Figures are instrumental for conveying your results but may be inscrutable without an effective legend. Write an effective legend for the above figure. Follow the guidelines outlined in the Week 3 workshop. Your legend should be three to five sentences long (100 - 300 words max). (4 MARKS)**
+
+    Figure 1.1: Incidence of Malaria in Levels of Maize Cultivation  
+    The incidence rate of malaria per 10,000 people were recorded in 20 villages located in high altitude areas of Ethiopia, each with varying levels of maize cultivation. High yield (μ=234.4, n=8, 95%CI(146.73,322.02) ) villages showed a significantly higher rate of malaria compared to both low yield villages(μ=17.7, n=6, 95%CI(4.01,31.33) ) and medium yield (μ=95.4, n=6, 95%CI(62.26,128.54) ) villages as the 95%CI do not overlap each other. This also shows a significant difference between low and medium yield villages. The graph shows mean and 95%CI which indicates confidence and error in the mean of rate of malaria in each yield level.
+
+**EXERCISE 9: Do you think the results support the idea that an increase in maize cultivation may be partly responsible for the increase in malaria? Describe what the main results are in the figure (following the process discussed in Week 3) and use this to support your answer. (3 MARKS)**
+
+    Theses results support the idea that the increased maize cultivation may partially be responsible for the increased malaria rate as there are no overlaps of confidence intervals, showing that we can be 95% certain that our means are not different due to random chance. Our true mean may lie anywhere within the 95% CI but accounting for that, there would still be a high likelyhood that the results are significantly different from each other.
+
+**EXERCISE 10: Could any potential confounding factors be affecting the study? If so, what were they and why? Explain (2 MARKS)**
+
+    A confounding factor could be that villages with high maize cultivation also tend to have a higher population, thus the need for more maize. A higher population may allow malaria to spread easier as there is a higher chance that someone in that village infect a mosquito which could then infect others in the village, rather than the amount of mosquitos. Furthermore, population density could be a larger counfounding variable, as a mosquito with malaria could infect large groups of people at once, increasing the incidnce of malaria.
+
+------------------------------------------------------------------------
+
+## Problem set 2: Sex and infectious disease
+
+Host populations are rarely homogeneous, and pathogens will encounter individuals that differ in age, nutritional condition, body size, immune status, and physiology. Often the greatest heterogeneity that a host will encounter will be due to differences between males and females within a given species. Upon infecting either sex, a pathogen will experience substantial differences in many physiological parameters, from immune capacity and metabolic rate to energy stores or body size, leading to one sex potentially being more exploitable than the other by a pathogen. Is man flu perhaps real? Do males and females differ in how well a pathogen can infect and proliferate within their bodies, and are males more susceptible to pathogen exploitation in general?
+
+To test this idea, researchers used a animal model system for infectious disease, the waterflea *Daphnia magna*. Male and female *Daphnia* were randomly chosen to be infected with a bacterial pathogen, *Pasteuria ramosa*, when they were 16 days old and the number of transmission spores that the pathogen produced measured every two days thereafter. At each age, eight animals were destructively sampled, and the number of transmission spores measured via flow cytometry. The data set sex-vs-infection.csv" contains information on the change in pathogen proliferation (measured in millions of transmission spores produced per animal) with age for both males and females.
+
+**EXERCISE 11: Formulate a hypothesis for this research project. Refer to Week 1 workshop for how to develop a hypothesis from a research question. (3 MARKS)**
+
+    Male Daphnia Magna are less susceptible to pathogen exploitation from the same pathogen than their female counterparts.
+
+**EXERCISE 12: Is this an experimental study or an observational study? Explain the basis for your answer. (2 MARKS)**
+
+    This is an experimental study since there is a treatment intervention and those groups are randomly selected and assigned.
+
+**EXERCISE 13: Based on the description of the experiment, which is the response variable and which is the explanatory variable (there may be more than one)? Are they each categorical or numerical? (2 MARKS)**
+
+    The reponse variable is the number of transmission spores and the explanatory variable is which treatment they recieve as well as the sex of the individual, both of which are categorical data.
+
+```{r}
+#Run this chunk to load the data. 
+sex_data <- read_csv("./sex-vs-infection.csv", 
+                     col_names = TRUE, 
+                     na = "NA",
+                     col_types = list(sex = col_factor(c("M", 
+                                                         "F")),
+                                      spores_mill = col_double(),
+                                      age = col_integer()))
+
+glimpse(sex_data, width = 75)
+```
+
+**EXERCISE 14: Given the sampling design, are the observed spore loads independent samples? Explain your answer. What is the total sample size for males and then for females? (3 MARKS)**
+
+    The spore loads are independent samples as the result of one waterflea does not affect the results of any others. There are also distinct treatment and control groups rather than tracking a change to the same sample before and after treatment has been applied. There are a total of 216 waterfleas with 88 males and 128 females.
+
+```{r}
+# Use this chunk for Exercise 14
+male <- sex_data %>%
+  filter(sex == "M")
+
+female <- sex_data %>%
+  filter(sex == "F")
+
+length(female$sex)
+length(male$sex)
+
+```
+
+**EXERCISE 15: Use the raw data to determine what the lowest and highest age for which data on pathogen performance was collected in males and females. Summarise your answers below. Use this information to reduce the data set to one that contain only ages for which data on pathogen proliferation (spore loads) exists for both males and females. (2 MARKS)**
+
+    males were measured from 18 days - 38 days and females were meansure from 18 - 48 days, thus we reduce the data set to include only measurements from 18 to 38 days inclusive.
+
+```{r}
+# Use this chunk for Exercise 15
+male %>%
+  summarise(min = min(age),
+            max = max(age))
+
+female %>%
+  summarise(min = min(age),
+            max = max(age))
+
+new_sex_data <- sex_data %>%
+  filter(age >= 18 & age <= 38)
+
+new_sex_data
+```
+
+**EXERCISE 16: Create a graph that effectively shows the differences between the sexes in the growth of a pathogen over time using the reduced data set you created above. Make sure you follow the guidelines for effective graphs covered in the Week 3 workshop. (4 MARKS)**
+
+```{r}
+# Use this chunk for Exercise 16.
+ggplot(new_sex_data, aes(age, spores_mill, colour = sex)) +
+  geom_point() +
+  stat_smooth(method = "lm", formula = y ~ x) +
+  scale_colour_discrete(labels = c("F" = "Female", 
+                              "M" = "Male")) +
+  labs(x = "Age (days)",
+       y = "Spores (x10^6)",
+       colour = "Sex")
+```
+
+**EXERCISE 17: Write an effective legend for the above figure. Follow the guidelines outlined in the Week 3 workshop. Your legend should be three to five sentences long (100 - 300 words max). (4 MARKS)**
+
+    Figure 2.1: Male and Female Dafina Magna Pathogen Poliferation Over Time
+    16 day old Dafina Magna waterfleas were randomly selected to be infected with Pasteuria ramosa bacteria. 8 males and 8 females were selected every 2 days to be analysed with flow cytometry to count the tranmission spores per million, males were only tested from 18 days to 38 days, so only data recorded in that time is included. Males show a significantly lower spore count than that of females of the same age, showing lower susceptibility to pathogen Poliferation than females.
+
+**EXERCISE 18: Do you think the results support the idea that pathogens might perform better in one sex over another? How do the results compare to your initial hypothesis? Describe what the main results are in the figure (following the process discussed in the Week 3) and use this to support your answer. (3 MARKS)**
+
+    These results are inconclusive as they only include one species of host and parasite. This could mean that this particular bacteria performs better in one sex of Dafina Magna. The graph shows that when accounted for error, there is no overlap of the lines of best fit, showing there is significant difference between the sexes. However, the hypothesis cannot be fully supported as how this bacteria behaves in other species and how this species responds to different pathogens is unknown.
+
+**EXERCISE 19: The study utilised a single species of host and parasite (Daphnia and Pasteuria) and a single genotype of each. If before beginning the experiment, the researchers obtained extra funding to double their sample size, how might they want to modify their sampling regime to increase either i) the precision or ii) the generality of their findings? Explain both your answers.(2 MARKS)**
+
+    The sample needs to be increased so that the hosts are split into two treatment groups, each being infected with different pathogens. Similarly, the same pathogen could be used to infect two different host species. This increased the generality of the results as it could be said that that in the Dafina Magna species have a difference between sexes in pathogen poliferation when exposed to the two pathogens, or that the Pasteuria ramosa bacteria affects one sex more in the two host species. Even larger samples with more host or bacteria is needed to generalise the findings to state there is a difference between male and female pathogen poliferation. 
+
+    The precision could be increased by simply increasing the number of hosts tested from 8 per 2 days to 16 per 2 days. This would decrease the standard error and thus increase precision.
